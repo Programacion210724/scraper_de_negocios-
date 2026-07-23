@@ -1,0 +1,21 @@
+# Credenciales de Google Sheets
+client_secret.json
+token.json
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Entornos virtuales
+.env
+.venv
+env/
+venv/
+
+# Archivos de Excel temporales
+*.xlsx
+
+# Archivos de debugging
+scraper/debug/

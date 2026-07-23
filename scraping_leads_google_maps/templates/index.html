@@ -1,0 +1,95 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scraper de Leads - Google Maps</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dark-toggle">
+        <span class="toggle-label">ON</span>
+        <label class="toggle-switch">
+            <input type="checkbox" id="dark-mode-toggle">
+            <span class="slider"></span>
+        </label>
+    </div>
+    <div class="container">
+        <header>
+            <h1>Extractor de Leads de Google Maps</h1>
+        </header>
+        <main>
+            <form id="scrape-form">
+                <div class="form-group">
+                    <label for="keyword">Palabra Clave</label>
+                    <input type="text" id="keyword" name="keyword" placeholder="Ej: Dentistas" required>
+                </div>
+                <div class="form-group">
+                    <label for="city">Ciudad</label>
+                    <input type="text" id="city" name="city" placeholder="Ej: Lima" required>
+                </div>
+                <div class="form-group">
+                    <label for="limit">Número de negocios</label>
+                    <input type="number" id="limit" name="limit" placeholder="Ej: 10" value="20" min="1" max="100" required>
+                </div>
+                <div class="form-group">
+                    <label for="mode">Tipo de extracción</label>
+                    <select id="mode" name="mode">
+                        <option value="simple">Extracción Simple (Rápida)</option>
+                        <option value="deep">Extracción Profunda (Más datos/Lenta)</option>
+                    </select>
+                </div>
+                <button type="submit" id="extract-btn">Extraer</button>
+            </form>
+<div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <p>Extrayendo datos de Google Maps... Esto puede tardar un par de minutos.</p>
+                <button id="cancel-btn" style="margin-top: 15px; background: #ef4444;">Detener</button>
+            </div>
+            <div id="dashboard" class="hidden">
+                <h2>Dashboard de Análisis</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-label">Total Leads</span>
+                        <span id="stat-total" class="stat-value">0</span>
+                    </div>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div id="results-container" class="hidden">
+                <div class="results-header">
+                    <h2>Resultados</h2>
+                    <div class="search-box">
+                        <input type="text" id="search-input" placeholder="Filtrar resultados...">
+                    </div>
+                </div>
+                <div class="actions-bar">
+                    <button id="download-btn">Descargar en Excel</button>
+                    <button id="save-sheets-btn">Guardar en Google Sheets</button>
+                </div>
+                <div class="table-responsive">
+                    <table id="results-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Dirección</th>
+                                <th>Teléfono</th>
+                                <th>Ciudad</th>
+                                <th>Categoría</th>
+                                <th>Google Maps</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

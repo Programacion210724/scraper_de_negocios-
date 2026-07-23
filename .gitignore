@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+.pytest_cache/
+
+# Node (kilo)
+node_modules/
+package-lock.json
+
+# Credenciales
+client_secret.json
+token.json
+service_account.json
+
+# Datos generados
+*.xlsx
+scraping_leads_google_maps/scraper/debug/
+scraping_leads_google_maps/leads_*.csv

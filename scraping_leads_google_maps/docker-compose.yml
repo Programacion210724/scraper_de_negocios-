@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  scraper-app:
+    build:
+      context: .
+      dockerfile: scraping_leads_google_maps/Dockerfile
+    container_name: google_maps_scraper
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
