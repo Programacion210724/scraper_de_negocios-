@@ -5,10 +5,12 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Instalar dependencias del sistema necesarias para Playwright y navegadores
+# Instalar dependencias del sistema necesarias para Playwright, navegadores y proxy
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
+    curl \
+    netcat-openbsd \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -26,8 +28,18 @@ RUN playwright install-deps chromium
 # Copiar el resto de la aplicación
 COPY scraping_leads_google_maps/ .
 
-# Exponer el puerto de Flask
-EXPOSE 5000
+# Variables del proxy y del scraper (rotación, lotes y back-off)
+ENV PROXY_ENABLED=0
+ENV PROXY_PORTS=0
+ENV PROXY_UPSTREAMS=
+ENV PROXY_ROTATE_EVERY=10
+ENV BATCH_SIZE=10
+ENV ROTATE_EVERY=10
+ENV MAX_RETRIES=3
+ENV BACKOFF_BASE=2.0
+
+# Exponer el puerto de Flask y el rango de puertos dinámicos del proxy
+EXPOSE 5000 8000-8010
 
 # Comando para ejecutar la aplicación
 CMD ["python", "app.py"]

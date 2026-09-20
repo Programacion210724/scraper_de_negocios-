@@ -8,4 +8,15 @@ services:
     container_name: google_maps_scraper
     ports:
       - "5000:5000"
+      # Rango de puertos dinámicos del proxy de navegación
+      - "8000-8010:8000-8010"
+    environment:
+      - PROXY_ENABLED=${PROXY_ENABLED:-0}
+      - PROXY_PORTS=${PROXY_PORTS:-0}
+      - PROXY_UPSTREAMS=${PROXY_UPSTREAMS:-}
+      - PROXY_ROTATE_EVERY=${PROXY_ROTATE_EVERY:-10}
+      - BATCH_SIZE=${BATCH_SIZE:-10}
+      - ROTATE_EVERY=${ROTATE_EVERY:-10}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - BACKOFF_BASE=${BACKOFF_BASE:-2.0}
     restart: unless-stopped
