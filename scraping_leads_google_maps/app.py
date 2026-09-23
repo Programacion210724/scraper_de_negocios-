@@ -5,7 +5,12 @@ import pandas as pd
 import io
 import logging
 import os
-from scraper.scraper import scrape_google_maps
+
+import fuentes  # noqa: F401 — activa el registro de GoogleMapsSource en ScraperFactory
+from modelos.scrape_request import ScrapeRequest
+from servicios.orquestador import Orquestador
+from servicios.response_adapter import leads_a_dict_legacy
+from excepciones.source_errors import SourceError, CaptchaError, SourceTimeoutError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -64,7 +69,7 @@ def scrape():
         limit_raw = data.get('limit', 20)
         limit = int(limit_raw)
         if limit <= 0: raise ValueError("El límite debe ser mayor a 0")
-        if limit > 500: limit = 500
+        if limit > 100: limit = 100
     except (ValueError, TypeError):
         return jsonify({'error': 'El límite debe ser un número entero válido'}), 400
 
@@ -73,18 +78,44 @@ def scrape():
 
     logger.info(f"Iniciando scraping ({mode}): '{keyword}' en '{city}' (Límite: {limit})")
 
+    orquestador = Orquestador()
+    scrape_request = ScrapeRequest(
+        keyword=keyword,
+        city=city,
+        limit=limit,
+        mode=mode,
+    )
+
     try:
-        results = asyncio.run(asyncio.wait_for(
-            scrape_google_maps(keyword, city, limit, mode, cancel_event), 
+        leads = asyncio.run(asyncio.wait_for(
+            orquestador.orquestar(scrape_request, cancel_event),
             timeout=600.0
         ))
-        if results is None:
+        if leads is None:
             return jsonify({'error': 'El proceso de scraping no devolvió resultados'}), 500
         if cancel_event.is_set():
-            return jsonify({'success': True, 'data': results, 'cancelled': True})
-        return jsonify({'success': True, 'data': results})
+            return jsonify({'success': True, 'data': leads_a_dict_legacy(leads), 'cancelled': True})
+        return jsonify({'success': True, 'data': leads_a_dict_legacy(leads)})
     except asyncio.TimeoutError:
         return jsonify({'error': 'La solicitud tardó demasiado. Intente con un límite menor o modo simple.'}), 504
+    except SourceTimeoutError as e:
+        logger.warning(
+            "Technical summary: timeout in source %s | Resumen: timeout en %s. Reintentalo.",
+            e.source, e.source,
+        )
+        return jsonify({'error': f'Timeout en la fuente {e.source}. Intente más tarde.'}), 504
+    except CaptchaError as e:
+        logger.warning(
+            "Technical summary: captcha detected in source %s | Resumen: captcha en %s.",
+            e.source, e.source,
+        )
+        return jsonify({'error': f'Captcha detectado en {e.source}. Intente más tarde.'}), 503
+    except SourceError as e:
+        logger.error(
+            "Technical summary: source error from %s | Resumen: error en la fuente %s. Reintenta.",
+            e.source, e.source,
+        )
+        return jsonify({'error': f'Error en la fuente {e.source}: {e.message}'}), 502
     except Exception as e:
         logger.exception(f"Error inesperado: {str(e)}")
         return jsonify({'error': f"Error interno del servidor: {str(e)}"}), 500

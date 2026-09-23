@@ -20,15 +20,37 @@ def test_scrape_invalid_limit_returns_400(client):
     assert resp.status_code == 400
 
 def test_scrape_success(client, sample_results, monkeypatch):
-    monkeypatch.setattr("asyncio.run", lambda coro, **kwargs: sample_results)
-    resp = client.post("/api/scrape", json={
-        "keyword": "Dentistas", "city": "Madrid", "limit": 10
-    })
+    from modelos.lead import Lead
+    
+    def dict_to_lead(d):
+        return Lead(
+            nombre=d.get("nombre", ""),
+            direccion=d.get("direccion", ""),
+            telefono=d.get("telefono", ""),
+            ciudad=d.get("ciudad", ""),
+            categoria_busqueda=d.get("categoria", ""),
+            url_raw=d.get("maps_url", ""),
+            fuente="google_maps",
+            maps_url=d.get("maps_url", ""),
+            categoria_pred=None,
+            confianza=None,
+            job_id="",
+        )
+    
+    sample_leads = [dict_to_lead(d) for d in sample_results]
+    
+    with patch("fuentes.google_maps.GoogleMapsSource.scrape", return_value=sample_leads):
+        resp = client.post("/api/scrape", json={
+            "keyword": "Dentistas", "city": "Madrid", "limit": 10
+        })
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["success"] is True
     assert len(data["data"]) == 2
     assert data["data"][0]["nombre"] == "Clínica Dental Madrid"
+    # Formato legacy: 'categoria' no 'categoria_busqueda'
+    assert "categoria" in data["data"][0]
+    assert "categoria_busqueda" not in data["data"][0]
 
 def test_download_no_data_returns_400(client):
     resp = client.post("/api/download", json={})
