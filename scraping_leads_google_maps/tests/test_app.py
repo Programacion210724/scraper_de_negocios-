@@ -1,5 +1,36 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
+from modelos.lead import Lead
+
+
+SAMPLE_LEADS = [
+    Lead(
+        nombre="Clínica Dental Madrid",
+        direccion="Calle Mayor 10, Madrid",
+        telefono="+34 912 345 678",
+        ciudad="Madrid",
+        categoria_busqueda="Dentistas",
+        url_raw="https://maps.google.com/place/abc123",
+        fuente="google_maps",
+        maps_url="https://maps.google.com/place/abc123",
+        categoria_pred="salud",
+        confianza=0.95,
+        job_id="",
+    ),
+    Lead(
+        nombre="Dentistas López",
+        direccion="Av. de la Constitución 25, Madrid",
+        telefono="+34 911 234 567",
+        ciudad="Madrid",
+        categoria_busqueda="Dentistas",
+        url_raw="https://maps.google.com/place/def456",
+        fuente="google_maps",
+        maps_url="https://maps.google.com/place/def456",
+        categoria_pred="salud",
+        confianza=0.90,
+        job_id="",
+    ),
+]
 
 def test_index_returns_200(client):
     resp = client.get("/")
@@ -21,7 +52,7 @@ def test_scrape_invalid_limit_returns_400(client):
 
 def test_scrape_success(client, sample_results, monkeypatch):
     from modelos.lead import Lead
-    
+
     def dict_to_lead(d):
         return Lead(
             nombre=d.get("nombre", ""),
@@ -36,9 +67,9 @@ def test_scrape_success(client, sample_results, monkeypatch):
             confianza=None,
             job_id="",
         )
-    
+
     sample_leads = [dict_to_lead(d) for d in sample_results]
-    
+
     with patch("fuentes.google_maps.GoogleMapsSource.scrape", return_value=sample_leads):
         resp = client.post("/api/scrape", json={
             "keyword": "Dentistas", "city": "Madrid", "limit": 10
@@ -66,9 +97,19 @@ def test_download_success(client, sample_results):
     assert resp.content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 def test_cancel_returns_success(client):
-    resp = client.post("/api/cancel")
-    assert resp.status_code == 200
-    assert resp.get_json()["success"] is True
+    """Cancelar un job existente devuelve éxito."""
+    # Primero crear un job
+    with patch("fuentes.google_maps.GoogleMapsSource.scrape", return_value=SAMPLE_LEADS):
+        resp = client.post("/api/scrape", json={
+            "keyword": "Dentistas", "city": "Madrid", "limit": 10
+        })
+    job_id = resp.get_json()["job_id"]
+
+    # Cancelar el job
+    cancel_resp = client.post("/api/cancel", json={"job_id": job_id})
+    assert cancel_resp.status_code == 200
+    assert cancel_resp.get_json()["success"] is True
+    assert cancel_resp.get_json()["job_id"] == job_id
 
 def test_save_to_sheets_no_data_returns_400(client):
     resp = client.post("/api/save-to-sheets", json={})

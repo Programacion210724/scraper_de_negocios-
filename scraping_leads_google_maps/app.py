@@ -10,13 +10,14 @@ import fuentes  # noqa: F401 — activa el registro de GoogleMapsSource en Scrap
 from modelos.scrape_request import ScrapeRequest
 from servicios.orquestador import Orquestador
 from servicios.response_adapter import leads_a_dict_legacy
+from servicios.gestor_jobs import GestorJobs, EstadoJob
 from excepciones.source_errors import SourceError, CaptchaError, SourceTimeoutError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-cancel_event = threading.Event()
+gestor_jobs = GestorJobs()
 DEFAULT_SHEET_ID = os.environ.get('DEFAULT_SHEET_ID', '1Vpal9WMVimSpIMf6-eljk-vQW3LyNB41z9KcRV45jQI')
 
 @app.route('/api/save-to-sheets', methods=['POST'])
@@ -55,9 +56,6 @@ def index():
 
 @app.route('/api/scrape', methods=['POST'])
 def scrape():
-    global cancel_event
-    cancel_event.clear()
-    
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No se recibió información en la solicitud'}), 400
@@ -86,45 +84,63 @@ def scrape():
         mode=mode,
     )
 
+    job_id = gestor_jobs.crear_job(scrape_request)
+    cancel_event = gestor_jobs.obtener_cancel_event(job_id)
+    gestor_jobs.actualizar_estado(job_id, EstadoJob.RUNNING)
+
     try:
         leads = asyncio.run(asyncio.wait_for(
             orquestador.orquestar(scrape_request, cancel_event),
             timeout=600.0
         ))
         if leads is None:
-            return jsonify({'error': 'El proceso de scraping no devolvió resultados'}), 500
+            gestor_jobs.registrar_error(job_id, 'El proceso de scraping no devolvió resultados')
+            return jsonify({'error': 'El proceso de scraping no devolvió resultados', 'job_id': job_id}), 500
         if cancel_event.is_set():
-            return jsonify({'success': True, 'data': leads_a_dict_legacy(leads), 'cancelled': True})
-        return jsonify({'success': True, 'data': leads_a_dict_legacy(leads)})
+            gestor_jobs.actualizar_estado(job_id, EstadoJob.CANCELLED)
+            return jsonify({'success': True, 'data': leads_a_dict_legacy(leads), 'cancelled': True, 'job_id': job_id})
+        gestor_jobs.registrar_resultados(job_id, len(leads), len(leads))
+        return jsonify({'success': True, 'data': leads_a_dict_legacy(leads), 'cancelled': False, 'job_id': job_id})
     except asyncio.TimeoutError:
-        return jsonify({'error': 'La solicitud tardó demasiado. Intente con un límite menor o modo simple.'}), 504
+        gestor_jobs.registrar_error(job_id, 'Timeout: la solicitud tardó demasiado')
+        return jsonify({'error': 'La solicitud tardó demasiado. Intente con un límite menor o modo simple.', 'job_id': job_id}), 504
     except SourceTimeoutError as e:
         logger.warning(
             "Technical summary: timeout in source %s | Resumen: timeout en %s. Reintentalo.",
             e.source, e.source,
         )
-        return jsonify({'error': f'Timeout en la fuente {e.source}. Intente más tarde.'}), 504
+        gestor_jobs.registrar_error(job_id, f'Timeout en la fuente {e.source}')
+        return jsonify({'error': f'Timeout en la fuente {e.source}. Intente más tarde.', 'job_id': job_id}), 504
     except CaptchaError as e:
         logger.warning(
             "Technical summary: captcha detected in source %s | Resumen: captcha en %s.",
             e.source, e.source,
         )
-        return jsonify({'error': f'Captcha detectado en {e.source}. Intente más tarde.'}), 503
+        gestor_jobs.registrar_error(job_id, f'Captcha detectado en {e.source}')
+        return jsonify({'error': f'Captcha detectado en {e.source}. Intente más tarde.', 'job_id': job_id}), 503
     except SourceError as e:
         logger.error(
             "Technical summary: source error from %s | Resumen: error en la fuente %s. Reintenta.",
             e.source, e.source,
         )
-        return jsonify({'error': f'Error en la fuente {e.source}: {e.message}'}), 502
+        gestor_jobs.registrar_error(job_id, f'Error en la fuente {e.source}: {e.message}')
+        return jsonify({'error': f'Error en la fuente {e.source}: {e.message}', 'job_id': job_id}), 502
     except Exception as e:
         logger.exception(f"Error inesperado: {str(e)}")
-        return jsonify({'error': f"Error interno del servidor: {str(e)}"}), 500
+        gestor_jobs.registrar_error(job_id, f"Error interno del servidor: {str(e)}")
+        return jsonify({'error': f"Error interno del servidor: {str(e)}", 'job_id': job_id}), 500
 
 @app.route('/api/cancel', methods=['POST'])
 def cancel():
-    cancel_event.set()
-    logger.info("Cancelado scraping por el usuario")
-    return jsonify({'success': True, 'message': 'Scraping cancelado'})
+    data = request.get_json()
+    if not data or 'job_id' not in data:
+        return jsonify({'error': 'job_id es obligatorio'}), 400
+
+    job_id = data['job_id']
+    success = gestor_jobs.cancelar_job(job_id)
+    if not success:
+        return jsonify({'error': f'Job no encontrado: {job_id}'}), 404
+    return jsonify({'success': True, 'message': 'Job cancelado', 'job_id': job_id})
 
 @app.route('/api/download', methods=['POST'])
 def download():
